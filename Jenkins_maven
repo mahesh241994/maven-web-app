@@ -1,0 +1,48 @@
+pipeline {
+    agent any
+    environment {
+        DOCKER_IMAGE_NAME = 'mavenapp'
+        CONTAINER_NAME = 'mavenapp-con'
+        SSH_CREDENTIALS_ID = 'remote_connection'  // Your SSH credentials ID
+    }
+    stages {
+        stage('Checkout') {
+            steps {
+                git 'https://github.com/mahesh241994/maven-web-app.git'
+            }
+        }
+        stage('Build') {
+            steps {
+                script {
+                    sh 'mvn clean package'
+                }
+            }
+        }
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    sh 'docker build -t $DOCKER_IMAGE_NAME .'
+                }
+            }
+        }
+        stage('Deploy') {
+            steps {
+                sshagent([env.SSH_CREDENTIALS_ID]) {
+                    script {
+                        sh '''
+                        ssh ubuntu@172.31.46.226 "
+                        if docker ps -a --format '{{.Names}}' | grep -q '^$CONTAINER_NAME$'; then
+                            echo 'Stopping and removing existing container...'
+                            docker stop $CONTAINER_NAME
+                            docker rm $CONTAINER_NAME
+                        fi
+                        echo 'Running new container...'
+                        docker run --name $CONTAINER_NAME -d -p 8090:8080 $DOCKER_IMAGE_NAME
+                        "
+                        '''
+                    }
+                }
+            }
+        }
+    }
+}
